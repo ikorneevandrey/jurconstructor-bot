@@ -1,0 +1,8 @@
+﻿meta:
+  environment: nodejs
+  toolchain:
+    name: nodejs
+    version: 18
+
+run:
+  command: npm start
