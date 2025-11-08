@@ -1,0 +1,14 @@
+meta:
+  environment: nodejs
+  toolchain:
+    name: nodejs
+    version: 18  # или ваша версия Node.js
+
+build:
+  # Для Node.js обычно не требуются дополнительные параметры сборки
+  # Amvera автоматически выполнит npm install
+
+run:
+  command: npm start
+  # Если нужно постоянное хранилище для файлов:
+  # persistenceMount: /data
