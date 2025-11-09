@@ -1,120 +1,135 @@
-// src/index.js
-require('dotenv').config();
-console.log('Token from env:', process.env.BOT_TOKEN || 'NOT FOUND'); // Для отладки
+﻿// ОТЛАДОЧНЫЙ КОД
+console.log('=== STARTING BOT ===');
+console.log('Node version:', process.version);
+console.log('BOT_TOKEN from env:', process.env.BOT_TOKEN ? 'EXISTS' : 'MISSING!');
 
+// Временные заглушки для функций работы с базой данных
+async function saveUser(userId, userData) {
+  console.log('Заглушка saveUser: сохраняем пользователя', userId, userData);
+  return true;
+}
+
+async function getUser(userId) {
+  console.log('Заглушка getUser: получаем пользователя', userId);
+  return {
+    telegramId: userId,
+    firstName: 'Test User',
+    username: 'testuser',
+    joined: new Date().toISOString()
+  };
+}
+
+// ОСНОВНОЙ КОД БОТА
 const { Telegraf } = require('telegraf');
+
+// ПРОВЕРКА ТОКЕНА
+if (!process.env.BOT_TOKEN) {
+  console.error('❌ CRITICAL ERROR: BOT_TOKEN is required!');
+  console.error('Please set BOT_TOKEN environment variable in Amvera settings');
+  process.exit(1);
+}
+
 const bot = new Telegraf(process.env.BOT_TOKEN);
+console.log('✅ Bot instance created with token');
 
-// Обработчик команды /start
-bot.start(async (ctx) => {
-  const user = ctx.from;
-
-  // Отправляем пользователю текст политики конфиденциальности и запрашиваем согласие
-  const consentMessage = `Добро пожаловать в Smart_JuristBot! 🧑‍💼
-
-Для начала работы и создания юридических документов мне необходимо обрабатывать ваши данные: идентификатор Telegram, имя и username.
-
-Ознакомьтесь с нашей Политикой конфиденциальности: [ваша_ссылка_на_политику]
-
-Вы согласны на обработку ваших персональных данных?`;
-
-  // Отправляем сообщение с инлайн-кнопками "Согласен" и "Не согласен"
+// ... остальной ваш код без изменений ...
+  // РћС‚РїСЂР°РІР»СЏРµРј СЃРѕРѕР±С‰РµРЅРёРµ СЃ РёРЅР»Р°Р№РЅ-РєРЅРѕРїРєР°РјРё "РЎРѕРіР»Р°СЃРµРЅ" Рё "РќРµ СЃРѕРіР»Р°СЃРµРЅ"
   ctx.reply(consentMessage, {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "✅ Согласен", callback_data: "consent_given" },
-          { text: "❌ Не согласен", callback_data: "consent_denied" }
+          { text: "вњ… РЎРѕРіР»Р°СЃРµРЅ", callback_data: "consent_given" },
+          { text: "вќЊ РќРµ СЃРѕРіР»Р°СЃРµРЅ", callback_data: "consent_denied" }
         ]
       ]
     }
   });
 });
 
-// Обработчик нажатия на кнопку согласия
+// РћР±СЂР°Р±РѕС‚С‡РёРє РЅР°Р¶Р°С‚РёСЏ РЅР° РєРЅРѕРїРєСѓ СЃРѕРіР»Р°СЃРёСЏ
 bot.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data;
 
   if (data === 'consent_given') {
-    // Только после получения согласия сохраняем данные
+    // РўРѕР»СЊРєРѕ РїРѕСЃР»Рµ РїРѕР»СѓС‡РµРЅРёСЏ СЃРѕРіР»Р°СЃРёСЏ СЃРѕС…СЂР°РЅСЏРµРј РґР°РЅРЅС‹Рµ
     const user = ctx.from;
     try {
       await saveUser(user.id, {
         firstName: user.first_name,
         username: user.username,
         joined: new Date().toISOString(),
-        consentGiven: true, // Сохраняем факт получения согласия
-        consentDate: new Date().toISOString() // и дату
+        consentGiven: true, // РЎРѕС…СЂР°РЅСЏРµРј С„Р°РєС‚ РїРѕР»СѓС‡РµРЅРёСЏ СЃРѕРіР»Р°СЃРёСЏ
+        consentDate: new Date().toISOString() // Рё РґР°С‚Сѓ
       });
-      ctx.editMessageText("Спасибо! Теперь вы можете пользоваться ботом. Используйте /menu для главного меню.");
+      ctx.editMessageText("РЎРїР°СЃРёР±Рѕ! РўРµРїРµСЂСЊ РІС‹ РјРѕР¶РµС‚Рµ РїРѕР»СЊР·РѕРІР°С‚СЊСЃСЏ Р±РѕС‚РѕРј. РСЃРїРѕР»СЊР·СѓР№С‚Рµ /menu РґР»СЏ РіР»Р°РІРЅРѕРіРѕ РјРµРЅСЋ.");
     } catch (error) {
-      console.error('Ошибка сохранения пользователя:', error);
-      ctx.editMessageText("Произошла ошибка при сохранении ваших данных. Пожалуйста, попробуйте позже.");
+      console.error('РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ:', error);
+      ctx.editMessageText("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё РІР°С€РёС… РґР°РЅРЅС‹С…. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РїРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ.");
     }
     ctx.answerCbQuery();
   } else if (data === 'consent_denied') {
-    ctx.editMessageText("Вы не дали согласие на обработку данных. К сожалению, функционал бота вам недоступен.");
+    ctx.editMessageText("Р’С‹ РЅРµ РґР°Р»Рё СЃРѕРіР»Р°СЃРёРµ РЅР° РѕР±СЂР°Р±РѕС‚РєСѓ РґР°РЅРЅС‹С…. Рљ СЃРѕР¶Р°Р»РµРЅРёСЋ, С„СѓРЅРєС†РёРѕРЅР°Р» Р±РѕС‚Р° РІР°Рј РЅРµРґРѕСЃС‚СѓРїРµРЅ.");
     ctx.answerCbQuery();
   } else if (data.startsWith('category_')) {
-    // Обработчик выбора категории (существующий функционал)
-    ctx.reply(`Вы выбрали: ${data.split('_')[1]}. Эта функция в разработке.`);
+    // РћР±СЂР°Р±РѕС‚С‡РёРє РІС‹Р±РѕСЂР° РєР°С‚РµРіРѕСЂРёРё (СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ С„СѓРЅРєС†РёРѕРЅР°Р»)
+    ctx.reply(`Р’С‹ РІС‹Р±СЂР°Р»Рё: ${data.split('_')[1]}. Р­С‚Р° С„СѓРЅРєС†РёСЏ РІ СЂР°Р·СЂР°Р±РѕС‚РєРµ.`);
     ctx.answerCbQuery();
   }
 });
 
-// Обработчик команды /profile
+// РћР±СЂР°Р±РѕС‚С‡РёРє РєРѕРјР°РЅРґС‹ /profile
 bot.command('profile', async (ctx) => {
   try {
-    // Используем новую функцию getUser, которая работает с Back4app
+    // РСЃРїРѕР»СЊР·СѓРµРј РЅРѕРІСѓСЋ С„СѓРЅРєС†РёСЋ getUser, РєРѕС‚РѕСЂР°СЏ СЂР°Р±РѕС‚Р°РµС‚ СЃ Back4app
     const userData = await getUser(ctx.from.id);
     if (userData) {
-      ctx.reply(`Ваш профиль:\nID: ${userData.telegramId}\nИмя: ${userData.firstName}\nUsername: @${userData.username}\nЗарегистрирован: ${new Date(userData.joined).toLocaleDateString()}`);
+      ctx.reply(`Р’Р°С€ РїСЂРѕС„РёР»СЊ:\nID: ${userData.telegramId}\nРРјСЏ: ${userData.firstName}\nUsername: @${userData.username}\nР—Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ: ${new Date(userData.joined).toLocaleDateString()}`);
     } else {
-      ctx.reply('Профиль не найден. Отправьте /start для регистрации.');
+      ctx.reply('РџСЂРѕС„РёР»СЊ РЅРµ РЅР°Р№РґРµРЅ. РћС‚РїСЂР°РІСЊС‚Рµ /start РґР»СЏ СЂРµРіРёСЃС‚СЂР°С†РёРё.');
     }
   } catch (error) {
-    console.error('Ошибка в /profile:', error);
-    ctx.reply('Произошла ошибка при получении профиля.');
+    console.error('РћС€РёР±РєР° РІ /profile:', error);
+    ctx.reply('РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё РїРѕР»СѓС‡РµРЅРёРё РїСЂРѕС„РёР»СЏ.');
   }
 });
 
-// Создаем главное меню
+// РЎРѕР·РґР°РµРј РіР»Р°РІРЅРѕРµ РјРµРЅСЋ
 bot.command('menu', (ctx) => { 
-  ctx.reply('Выберите действие:', { 
+  ctx.reply('Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ:', { 
     reply_markup: { 
       keyboard: [ 
-        ['📄 Создать документ'],
-        ['📋 Мои заказы', '👤 Мой профиль'],
-        ['❓ Помощь', '📞 Поддержка']
+        ['рџ“„ РЎРѕР·РґР°С‚СЊ РґРѕРєСѓРјРµРЅС‚'],
+        ['рџ“‹ РњРѕРё Р·Р°РєР°Р·С‹', 'рџ‘¤ РњРѕР№ РїСЂРѕС„РёР»СЊ'],
+        ['вќ“ РџРѕРјРѕС‰СЊ', 'рџ“ћ РџРѕРґРґРµСЂР¶РєР°']
       ], 
       resize_keyboard: true 
     } 
   }); 
 });
 
-// Обработчик кнопки "Создать документ" 
-bot.hears('📄 Создать документ', (ctx) => { 
-  ctx.reply('Выберите тип документа:', { 
+// РћР±СЂР°Р±РѕС‚С‡РёРє РєРЅРѕРїРєРё "РЎРѕР·РґР°С‚СЊ РґРѕРєСѓРјРµРЅС‚" 
+bot.hears('рџ“„ РЎРѕР·РґР°С‚СЊ РґРѕРєСѓРјРµРЅС‚', (ctx) => { 
+  ctx.reply('Р’С‹Р±РµСЂРёС‚Рµ С‚РёРї РґРѕРєСѓРјРµРЅС‚Р°:', { 
     reply_markup: { 
       inline_keyboard: [ 
         [ 
-          { text: 'Претензии', callback_data: 'category_claim' }, 
-          { text: 'Жалобы', callback_data: 'category_complaint' } 
+          { text: 'РџСЂРµС‚РµРЅР·РёРё', callback_data: 'category_claim' }, 
+          { text: 'Р–Р°Р»РѕР±С‹', callback_data: 'category_complaint' } 
         ], 
         [ 
-          { text: 'Ходатайства', callback_data: 'category_petition' }, 
-          { text: 'Исковые заявления', callback_data: 'category_lawsuit' } 
+          { text: 'РҐРѕРґР°С‚Р°Р№СЃС‚РІР°', callback_data: 'category_petition' }, 
+          { text: 'РСЃРєРѕРІС‹Рµ Р·Р°СЏРІР»РµРЅРёСЏ', callback_data: 'category_lawsuit' } 
         ] 
       ] 
     } 
   }); 
 });
 
-// Запускаем бота 
+// Р—Р°РїСѓСЃРєР°РµРј Р±РѕС‚Р° 
 bot.launch().then(() => { 
-  console.log('Бот успешно запущен!'); 
+  console.log('Р‘РѕС‚ СѓСЃРїРµС€РЅРѕ Р·Р°РїСѓС‰РµРЅ!'); 
 });
 
-// Правильно завершаем работу при остановке 
+// РџСЂР°РІРёР»СЊРЅРѕ Р·Р°РІРµСЂС€Р°РµРј СЂР°Р±РѕС‚Сѓ РїСЂРё РѕСЃС‚Р°РЅРѕРІРєРµ 
 process.once('SIGINT', () => bot.stop('SIGINT')); 
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
