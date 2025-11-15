@@ -1,12 +1,12 @@
-// index.js - финальная версия с улучшенной отладкой и стабильностью
+// index.js - рабочая версия
 
-// 1️⃣ Загрузка dotenv первой строкой
+// 1️⃣ Загрузка переменных окружения
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 console.log('=== DEBUG VERSION 2025-11-15 ===');
 console.log('Node version:', process.version);
-console.log('DEBUG: BOT_TOKEN =', process.env.BOT_TOKEN?.slice(0, 10) + '...'); // не выводим полностью токен
+console.log('DEBUG: BOT_TOKEN =', process.env.BOT_TOKEN?.slice(0, 10) + '...');
 
 if (!process.env.BOT_TOKEN) {
   console.error('ERROR: BOT_TOKEN is required!');
@@ -17,15 +17,15 @@ if (!process.env.BOT_TOKEN) {
 const { Telegraf } = require('telegraf');
 const fs = require('fs');
 
-// 3️⃣ Проверка структуры проекта
+// 3️⃣ Отладка файловой системы
 try {
   console.log('Files in project root:', fs.readdirSync('.'));
   console.log('Files in src:', fs.readdirSync('./src'));
 } catch (err) {
-  console.log('Error reading files:', err.message);
+  console.error('Error reading files:', err.message);
 }
 
-// 4️⃣ Заглушки для базы данных (позже заменить на реальную БД)
+// 4️⃣ Заглушки для работы с базой данных
 async function saveUser(userId, userData) {
   console.log('Saving user:', userId, userData);
   return true;
@@ -64,7 +64,7 @@ bot.start(async (ctx) => {
   });
 });
 
-// 7️⃣ Обработчик inline-кнопок
+// 7️⃣ Обработчик callback_query
 bot.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data;
   try {
@@ -79,13 +79,13 @@ bot.on('callback_query', async (ctx) => {
       });
       await ctx.editMessageText("Спасибо! Теперь вы можете пользоваться ботом. Используйте /menu для главного меню.");
     } else if (data === 'consent_denied') {
-      await ctx.editMessageText("Вы не дали согласие. Функционал бота недоступен.");
+      await ctx.editMessageText("Вы не дали согласие на обработку данных. Функционал бота недоступен.");
     } else if (data.startsWith('category_')) {
       await ctx.reply(`Вы выбрали: ${data.split('_')[1]}. Эта функция в разработке.`);
     }
     await ctx.answerCbQuery();
-  } catch (err) {
-    console.error('Callback query error:', err);
+  } catch (error) {
+    console.error('Callback query error:', error);
   }
 });
 
@@ -98,8 +98,8 @@ bot.command('profile', async (ctx) => {
     } else {
       await ctx.reply('Профиль не найден. Отправьте /start для регистрации.');
     }
-  } catch (err) {
-    console.error('Error in /profile:', err);
+  } catch (error) {
+    console.error('Error in /profile:', error);
     await ctx.reply('Произошла ошибка при получении профиля.');
   }
 });
@@ -118,7 +118,7 @@ bot.command('menu', (ctx) => {
   });
 });
 
-// 🔟 Кнопка "Создать документ"
+// 🔟 Обработчик кнопки "Создать документ"
 bot.hears('📄 Создать документ', (ctx) => {
   ctx.reply('Выберите тип документа:', {
     reply_markup: {
@@ -144,6 +144,6 @@ bot.launch()
     process.exit(1);
   });
 
-// 1️⃣2️⃣ Корректное завершение работы
+// 1️⃣2️⃣ Завершение работы
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
