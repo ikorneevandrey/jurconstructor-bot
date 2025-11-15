@@ -1,8 +1,11 @@
-﻿meta:
-  environment: nodejs
-  toolchain:
-    name: nodejs
-    version: 18
+﻿name: jurconstructor-bot
+runtime: nodejs18
+
+build:
+  command: npm install
 
 run:
   command: npm start
+
+environment:
+  NODE_ENV: production
