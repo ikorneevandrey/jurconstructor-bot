@@ -50,7 +50,7 @@ bot.start(async (ctx) => {
 
 Для начала работы необходимо согласие на обработку данных (Telegram ID, имя, username).
 
-Политика конфиденциальности: [ваша_ссылка]`;
+Политика конфиденциальности: https://disk.yandex.ru/i/iN8LYPvxzELuOg`;
 
   await ctx.reply(consentMessage, {
     reply_markup: {
