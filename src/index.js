@@ -1,12 +1,16 @@
-// index.js - рабочая версия
+// ==========================================
+// index.js — Чистая рабочая версия 2025-11-15
+// С локальной JSON-базой данных
+// ==========================================
 
-// 1️⃣ Загрузка переменных окружения
+// 1️⃣ Загрузка .env
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-console.log('=== DEBUG VERSION 2025-11-15 ===');
-console.log('Node version:', process.version);
-console.log('DEBUG: BOT_TOKEN =', process.env.BOT_TOKEN?.slice(0, 10) + '...');
+// Проверка BOT_TOKEN
+console.log('=== BOT STARTUP DEBUG ===');
+console.log('Node:', process.version);
+console.log('BOT_TOKEN:', process.env.BOT_TOKEN ? 'OK' : 'MISSING');
 
 if (!process.env.BOT_TOKEN) {
   console.error('ERROR: BOT_TOKEN is required!');
@@ -17,38 +21,30 @@ if (!process.env.BOT_TOKEN) {
 const { Telegraf } = require('telegraf');
 const fs = require('fs');
 
-// 3️⃣ Отладка файловой системы
+// Импорт локальной базы данных
+const { saveUser, getUser } = require('./services/data-storage');
+
+// 3️⃣ Файловая диагностика (удобно при деплое)
 try {
-  console.log('Files in project root:', fs.readdirSync('.'));
-  console.log('Files in src:', fs.readdirSync('./src'));
+  console.log('Root files:', fs.readdirSync('.'));
+  console.log('Src files:', fs.readdirSync('./src'));
 } catch (err) {
-  console.error('Error reading files:', err.message);
+  console.error('FS error:', err.message);
 }
 
-// 4️⃣ Заглушки для работы с базой данных
-async function saveUser(userId, userData) {
-  console.log('Saving user:', userId, userData);
-  return true;
-}
-
-async function getUser(userId) {
-  console.log('Fetching user:', userId);
-  return {
-    telegramId: userId,
-    firstName: 'Test User',
-    username: 'testuser',
-    joined: new Date().toISOString()
-  };
-}
-
-// 5️⃣ Создание бота
+// 4️⃣ Создание бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// 6️⃣ Команда /start
+// =============================
+// 5️⃣ /start — приветствие
+// =============================
 bot.start(async (ctx) => {
   const consentMessage = `Добро пожаловать в Smart_JuristBot! 🧑‍💼
 
-Для начала работы необходимо согласие на обработку данных (Telegram ID, имя, username).
+Для начала работы необходимо согласие на обработку минимальных данных:
+• Telegram ID  
+• Имя  
+• Username  
 
 Политика конфиденциальности: https://disk.yandex.ru/i/iN8LYPvxzELuOg`;
 
@@ -56,55 +52,76 @@ bot.start(async (ctx) => {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "✅ Согласен", callback_data: "consent_given" },
-          { text: "❌ Не согласен", callback_data: "consent_denied" }
+          { text: '✅ Согласен', callback_data: 'consent_given' },
+          { text: '❌ Не согласен', callback_data: 'consent_denied' }
         ]
       ]
     }
   });
 });
 
-// 7️⃣ Обработчик callback_query
+
+// =============================
+// 6️⃣ Обработчики callback кнопок
+// =============================
 bot.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data;
+
   try {
     if (data === 'consent_given') {
       const user = ctx.from;
-      await saveUser(user.id, {
-        firstName: user.first_name,
-        username: user.username,
+
+      const userData = {
+        telegramId: user.id,
+        firstName: user.first_name || '',
+        username: user.username || '',
         joined: new Date().toISOString(),
         consentGiven: true,
         consentDate: new Date().toISOString()
-      });
-      await ctx.editMessageText("Спасибо! Теперь вы можете пользоваться ботом. Используйте /menu для главного меню.");
+      };
+
+      saveUser(user.id, userData);
+
+      await ctx.editMessageText(
+        'Спасибо! Согласие принято. Теперь используйте команду /menu.'
+      );
+
     } else if (data === 'consent_denied') {
-      await ctx.editMessageText("Вы не дали согласие на обработку данных. Функционал бота недоступен.");
-    } else if (data.startsWith('category_')) {
-      await ctx.reply(`Вы выбрали: ${data.split('_')[1]}. Эта функция в разработке.`);
+      await ctx.editMessageText('Без согласия функционал недоступен.');
     }
+
     await ctx.answerCbQuery();
-  } catch (error) {
-    console.error('Callback query error:', error);
+
+  } catch (err) {
+    console.error('Callback error:', err);
   }
 });
 
-// 8️⃣ Команда /profile
+
+// =============================
+// 7️⃣ /profile — Профиль пользователя
+// =============================
 bot.command('profile', async (ctx) => {
-  try {
-    const userData = await getUser(ctx.from.id);
-    if (userData) {
-      await ctx.reply(`Ваш профиль:\nID: ${userData.telegramId}\nИмя: ${userData.firstName}\nUsername: @${userData.username}\nЗарегистрирован: ${new Date(userData.joined).toLocaleDateString()}`);
-    } else {
-      await ctx.reply('Профиль не найден. Отправьте /start для регистрации.');
-    }
-  } catch (error) {
-    console.error('Error in /profile:', error);
-    await ctx.reply('Произошла ошибка при получении профиля.');
+  const user = getUser(ctx.from.id);
+
+  if (!user) {
+    return ctx.reply('Профиль не найден. Отправьте /start для регистрации.');
   }
+
+  const msg = `Ваш профиль:
+ID: ${user.telegramId}
+Имя: ${user.firstName}
+Username: @${user.username}
+Дата регистрации: ${new Date(user.joined).toLocaleDateString()}
+`;
+
+  await ctx.reply(msg);
 });
 
-// 9️⃣ Команда /menu
+
+// =============================
+// 8️⃣ /menu — Главное меню
+// =============================
 bot.command('menu', (ctx) => {
   ctx.reply('Выберите действие:', {
     reply_markup: {
@@ -118,7 +135,10 @@ bot.command('menu', (ctx) => {
   });
 });
 
-// 🔟 Обработчик кнопки "Создать документ"
+
+// =============================
+// 9️⃣ Кнопка “Создать документ”
+// =============================
 bot.hears('📄 Создать документ', (ctx) => {
   ctx.reply('Выберите тип документа:', {
     reply_markup: {
@@ -136,7 +156,20 @@ bot.hears('📄 Создать документ', (ctx) => {
   });
 });
 
-// 1️⃣1️⃣ Запуск бота
+
+// =============================
+// 🔟 Реакция на категории
+// =============================
+bot.action(/category_.+/, async (ctx) => {
+  const category = ctx.match[0].split('_')[1];
+  await ctx.reply(`Вы выбрали категорию: ${category}. Функция в разработке.`);
+  await ctx.answerCbQuery();
+});
+
+
+// =============================
+// 1️⃣1️⃣ Запуск
+// =============================
 bot.launch()
   .then(() => console.log('=== BOT STARTED SUCCESSFULLY ==='))
   .catch((err) => {
@@ -144,6 +177,9 @@ bot.launch()
     process.exit(1);
   });
 
-// 1️⃣2️⃣ Завершение работы
+
+// =============================
+// 1️⃣2️⃣ Корректное завершение
+// =============================
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
