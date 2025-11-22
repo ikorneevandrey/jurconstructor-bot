@@ -11,9 +11,10 @@
     "build": "echo \"Build process would go here\""
   },
   "dependencies": {
-    "axios": "^1.4.0",
+    "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "node-cron": "^3.0.0",
+    "pg": "^8.16.3",
     "telegraf": "^4.12.2"
   },
   "devDependencies": {

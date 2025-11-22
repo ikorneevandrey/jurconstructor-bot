@@ -1,6 +1,5 @@
 // ==========================================
-// index.js — Чистая рабочая версия 2025-11-15
-// С локальной JSON-базой данных
+// index.js — Бот с JSON базой на сервере
 // ==========================================
 
 // 1️⃣ Загрузка .env
@@ -21,10 +20,11 @@ if (!process.env.BOT_TOKEN) {
 const { Telegraf } = require('telegraf');
 const fs = require('fs');
 
-// Импорт локальной базы данных
-const { saveUser, getUser } = require('./services/data-storage');
+// Пути к JSON файлам
+const USERS_FILE = path.resolve(__dirname, './data/users.json');
+const DATABASE_FILE = path.resolve(__dirname, './data/database.json');
 
-// 3️⃣ Файловая диагностика (удобно при деплое)
+// 3️⃣ Файловая диагностика
 try {
   console.log('Root files:', fs.readdirSync('.'));
   console.log('Src files:', fs.readdirSync('./src'));
@@ -32,16 +32,49 @@ try {
   console.error('FS error:', err.message);
 }
 
-// 4️⃣ Создание бота
+// =============================
+// 4️⃣ Функции работы с JSON
+// =============================
+function readJSON(filePath) {
+  if (!fs.existsSync(filePath)) return {};
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+}
+
+function writeJSON(filePath, data) {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+// Пользователи
+function saveUser(userId, userData) {
+  const users = readJSON(USERS_FILE);
+  users[userId] = userData;
+  writeJSON(USERS_FILE, users);
+}
+
+function getUser(userId) {
+  const users = readJSON(USERS_FILE);
+  return users[userId] || null;
+}
+
+// Документы
+function saveDocument(docId, docData) {
+  const db = readJSON(DATABASE_FILE);
+  db[docId] = docData;
+  writeJSON(DATABASE_FILE, db);
+}
+
+// =============================
+// 5️⃣ Создание бота
+// =============================
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // =============================
-// 5️⃣ /start — приветствие
+// 6️⃣ /start — приветствие
 // =============================
 bot.start(async (ctx) => {
   const consentMessage = `Добро пожаловать в Smart_JuristBot! 🧑‍💼
 
-Для начала работы необходимо согласие на обработку минимальных данных:
+Для работы бота необходимо согласие на обработку минимальных данных:
 • Telegram ID  
 • Имя  
 • Username  
@@ -60,9 +93,8 @@ bot.start(async (ctx) => {
   });
 });
 
-
 // =============================
-// 6️⃣ Обработчики callback кнопок
+// 7️⃣ Callback кнопки
 // =============================
 bot.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data;
@@ -97,9 +129,8 @@ bot.on('callback_query', async (ctx) => {
   }
 });
 
-
 // =============================
-// 7️⃣ /profile — Профиль пользователя
+// 8️⃣ /profile — Профиль пользователя
 // =============================
 bot.command('profile', async (ctx) => {
   const user = getUser(ctx.from.id);
@@ -112,15 +143,13 @@ bot.command('profile', async (ctx) => {
 ID: ${user.telegramId}
 Имя: ${user.firstName}
 Username: @${user.username}
-Дата регистрации: ${new Date(user.joined).toLocaleDateString()}
-`;
+Дата регистрации: ${new Date(user.joined).toLocaleDateString()}`;
 
   await ctx.reply(msg);
 });
 
-
 // =============================
-// 8️⃣ /menu — Главное меню
+// 9️⃣ /menu — Главное меню
 // =============================
 bot.command('menu', (ctx) => {
   ctx.reply('Выберите действие:', {
@@ -135,9 +164,8 @@ bot.command('menu', (ctx) => {
   });
 });
 
-
 // =============================
-// 9️⃣ Кнопка “Создать документ”
+// 🔟 Кнопка “Создать документ”
 // =============================
 bot.hears('📄 Создать документ', (ctx) => {
   ctx.reply('Выберите тип документа:', {
@@ -156,9 +184,8 @@ bot.hears('📄 Создать документ', (ctx) => {
   });
 });
 
-
 // =============================
-// 🔟 Реакция на категории
+// 1️⃣1️⃣ Реакция на категории
 // =============================
 bot.action(/category_.+/, async (ctx) => {
   const category = ctx.match[0].split('_')[1];
@@ -166,9 +193,8 @@ bot.action(/category_.+/, async (ctx) => {
   await ctx.answerCbQuery();
 });
 
-
 // =============================
-// 1️⃣1️⃣ Запуск
+// 1️⃣2️⃣ Запуск
 // =============================
 bot.launch()
   .then(() => console.log('=== BOT STARTED SUCCESSFULLY ==='))
@@ -177,9 +203,8 @@ bot.launch()
     process.exit(1);
   });
 
-
 // =============================
-// 1️⃣2️⃣ Корректное завершение
+// 1️⃣3️⃣ Корректное завершение
 // =============================
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
