@@ -1,85 +1,82 @@
 // ==========================================
-// index.js — Бот с JSON базой на сервере
+// index.js — Серверная версия с JSON-хранилищем
+// Готов для последующей синхронизации с PostgreSQL
 // ==========================================
 
 // 1️⃣ Загрузка .env
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-// Проверка BOT_TOKEN
-console.log('=== BOT STARTUP DEBUG ===');
-console.log('Node:', process.version);
-console.log('BOT_TOKEN:', process.env.BOT_TOKEN ? 'OK' : 'MISSING');
-
-if (!process.env.BOT_TOKEN) {
-  console.error('ERROR: BOT_TOKEN is required!');
-  process.exit(1);
-}
-
 // 2️⃣ Импорты
-const { Telegraf } = require('telegraf');
 const fs = require('fs');
+const { Telegraf } = require('telegraf');
 
-// Пути к JSON файлам
-const USERS_FILE = path.resolve(__dirname, './data/users.json');
-const DATABASE_FILE = path.resolve(__dirname, './data/database.json');
+// Локальное хранилище JSON
+const USERS_FILE = path.join(__dirname, 'data', 'users.json');
+const DB_FILE = path.join(__dirname, 'data', 'database.json');
 
-// 3️⃣ Файловая диагностика
-try {
-  console.log('Root files:', fs.readdirSync('.'));
-  console.log('Src files:', fs.readdirSync('./src'));
-} catch (err) {
-  console.error('FS error:', err.message);
+// Создание файлов при отсутствии
+if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '{}');
+if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '{}');
+
+// 3️⃣ Функции работы с JSON
+function readJSON(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return {};
+  }
 }
 
-// =============================
-// 4️⃣ Функции работы с JSON
-// =============================
-function readJSON(filePath) {
-  if (!fs.existsSync(filePath)) return {};
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
-function writeJSON(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-}
-
-// Пользователи
-function saveUser(userId, userData) {
+function saveUser(id, data) {
   const users = readJSON(USERS_FILE);
-  users[userId] = userData;
+  users[id] = data;
   writeJSON(USERS_FILE, users);
 }
 
-function getUser(userId) {
+function getUser(id) {
   const users = readJSON(USERS_FILE);
-  return users[userId] || null;
+  return users[id] || null;
 }
 
-// Документы
-function saveDocument(docId, docData) {
-  const db = readJSON(DATABASE_FILE);
-  db[docId] = docData;
-  writeJSON(DATABASE_FILE, db);
+// 4️⃣ PostgreSQL конфиг (пока НЕ используется)
+const PG_CONFIG = {
+  user: process.env.PG_USER,
+  host: process.env.PG_HOST,
+  database: process.env.PG_DATABASE,
+  password: process.env.PG_PASSWORD,
+  port: process.env.PG_PORT
+};
+
+// Это только резерв под будущую синхронизацию:
+// console.log("PG config loaded:", PG_CONFIG);
+
+// 5️⃣ Проверка токена
+if (!process.env.BOT_TOKEN) {
+  console.error("❌ ERROR: BOT_TOKEN missing in .env");
+  process.exit(1);
 }
 
-// =============================
-// 5️⃣ Создание бота
-// =============================
+// 6️⃣ Создание бота
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // =============================
-// 6️⃣ /start — приветствие
+// 7️⃣ Команда /start — согласие
 // =============================
 bot.start(async (ctx) => {
   const consentMessage = `Добро пожаловать в Smart_JuristBot! 🧑‍💼
 
-Для работы бота необходимо согласие на обработку минимальных данных:
-• Telegram ID  
-• Имя  
-• Username  
+Для работы необходимо согласие на обработку минимальных данных:
+• Telegram ID
+• Имя
+• Username
 
-Политика конфиденциальности: https://disk.yandex.ru/i/iN8LYPvxzELuOg`;
+Политика конфиденциальности:
+https://disk.yandex.ru/i/iN8LYPvxzELuOg`;
 
   await ctx.reply(consentMessage, {
     reply_markup: {
@@ -94,43 +91,37 @@ bot.start(async (ctx) => {
 });
 
 // =============================
-// 7️⃣ Callback кнопки
+// 8️⃣ Обработка согласия
 // =============================
 bot.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data;
 
-  try {
-    if (data === 'consent_given') {
-      const user = ctx.from;
+  if (data === 'consent_given') {
+    const user = ctx.from;
 
-      const userData = {
-        telegramId: user.id,
-        firstName: user.first_name || '',
-        username: user.username || '',
-        joined: new Date().toISOString(),
-        consentGiven: true,
-        consentDate: new Date().toISOString()
-      };
+    const userData = {
+      telegramId: user.id,
+      firstName: user.first_name || '',
+      username: user.username || '',
+      joined: new Date().toISOString(),
+      consentGiven: true,
+      consentDate: new Date().toISOString()
+    };
 
-      saveUser(user.id, userData);
+    saveUser(user.id, userData);
 
-      await ctx.editMessageText(
-        'Спасибо! Согласие принято. Теперь используйте команду /menu.'
-      );
-
-    } else if (data === 'consent_denied') {
-      await ctx.editMessageText('Без согласия функционал недоступен.');
-    }
-
-    await ctx.answerCbQuery();
-
-  } catch (err) {
-    console.error('Callback error:', err);
+    await ctx.editMessageText('Спасибо! Теперь используйте команду /menu.');
   }
+
+  if (data === 'consent_denied') {
+    await ctx.editMessageText('Без согласия функционал недоступен.');
+  }
+
+  await ctx.answerCbQuery();
 });
 
 // =============================
-// 8️⃣ /profile — Профиль пользователя
+// 9️⃣ Команда /profile
 // =============================
 bot.command('profile', async (ctx) => {
   const user = getUser(ctx.from.id);
@@ -149,7 +140,7 @@ Username: @${user.username}
 });
 
 // =============================
-// 9️⃣ /menu — Главное меню
+// 🔟 Команда /menu
 // =============================
 bot.command('menu', (ctx) => {
   ctx.reply('Выберите действие:', {
@@ -165,7 +156,7 @@ bot.command('menu', (ctx) => {
 });
 
 // =============================
-// 🔟 Кнопка “Создать документ”
+// 1️⃣1️⃣ Создать документ
 // =============================
 bot.hears('📄 Создать документ', (ctx) => {
   ctx.reply('Выберите тип документа:', {
@@ -185,7 +176,7 @@ bot.hears('📄 Создать документ', (ctx) => {
 });
 
 // =============================
-// 1️⃣1️⃣ Реакция на категории
+// 1️⃣2️⃣ Категории
 // =============================
 bot.action(/category_.+/, async (ctx) => {
   const category = ctx.match[0].split('_')[1];
@@ -194,17 +185,14 @@ bot.action(/category_.+/, async (ctx) => {
 });
 
 // =============================
-// 1️⃣2️⃣ Запуск
+// 1️⃣3️⃣ Запуск бота
 // =============================
 bot.launch()
-  .then(() => console.log('=== BOT STARTED SUCCESSFULLY ==='))
-  .catch((err) => {
-    console.error('BOT STARTUP ERROR:', err);
-    process.exit(1);
-  });
+  .then(() => console.log('🤖 Bot started successfully'))
+  .catch((err) => console.error('Bot launch error:', err));
 
 // =============================
-// 1️⃣3️⃣ Корректное завершение
+// 1️⃣4️⃣ Корректное завершение
 // =============================
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
