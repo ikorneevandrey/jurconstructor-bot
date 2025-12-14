@@ -1,23 +1,29 @@
 {
   "name": "jurconstructor-bot",
-  "version": "1.0.0",
-  "description": "Bot for legal documents generation",
-  "main": "src/index.js",
+  "version": "1.0.1",
+  "description": "Синхронный бот-юрист для создания юридических документов",
+  "main": "src/main.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "lint": "eslint src/",
-    "build": "echo \"Build process would go here\""
+    "start": "node src/main.js",
+    "dev": "nodemon src/main.js",
+    "backup": "node src/scripts/backup.js",
+    "stats": "node src/scripts/stats.js",
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
-    "axios": "^1.13.2",
-    "dotenv": "^17.2.3",
-    "node-cron": "^3.0.0",
-    "pg": "^8.16.3",
-    "telegraf": "^4.12.2"
+    "telegraf": "^4.16.3",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
-  }
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "bot",
+    "telegram",
+    "legal",
+    "jurconstructor",
+    "documents"
+  ],
+  "author": "Andrey Korneev",
+  "license": "MIT"
 }
