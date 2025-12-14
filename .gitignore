@@ -1,20 +1,8 @@
-# Зависимости
 node_modules/
-npm-debug.log*
-
-# Файлы окружения
 .env
-.env.local
-.env.production
-
-# Логи
-logs/
 *.log
-
-# Резервные копии
-*.backup
-*.tmp
-
-# IDE
-.vscode/
-.idea/
+backups/
+exports/
+logs/
+test_*.js
+minimal_*.js
