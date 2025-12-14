@@ -1,5 +1,15 @@
-﻿name: jurconstructor-bot
+name: jurconstructor-bot
 runtime: nodejs18
+
+include:
+  - package.json
+  - package-lock.json
+  - src/
+  - main.js
+  - sync.js
+  - .env
+  - .dockerignore
+  - amvera.yml
 
 build:
   command: npm install
