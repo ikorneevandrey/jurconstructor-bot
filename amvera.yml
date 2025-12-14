@@ -6,7 +6,7 @@ build:
 
 run:
   command: npm start
-  scriptName: src/index.js
+  scriptName: src/main.js
 
 environment:
   NODE_ENV: production
