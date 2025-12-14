@@ -1,0 +1,30 @@
+{
+  "name": "jurconstructor-bot",
+  "version": "1.0.1",
+  "description": "Синхронный бот-юрист для создания юридических документов",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "dev": "nodemon src/main.js",
+    "backup": "node src/scripts/backup.js",
+    "stats": "node src/scripts/stats.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "bot",
+    "telegram",
+    "legal",
+    "jurconstructor",
+    "documents"
+  ],
+  "author": "Andrey Korneev",
+  "license": "MIT"
+}
+
