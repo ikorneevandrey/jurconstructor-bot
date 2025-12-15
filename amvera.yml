@@ -1,11 +1,4 @@
 name: jurconstructor-bot
 runtime: nodejs18
-
-# Для nodejs18 обычно НЕ нужен раздел 'include' - система сама определяет файлы
-# Для nodejs18 обычно НЕ нужен раздел 'build' - 'npm install' выполняется автоматически
-
 run:
-  command: node src/main.js # Указывайте полную команду запуска
-
-environment:
-  NODE_ENV: production
+  command: node src/main.js
