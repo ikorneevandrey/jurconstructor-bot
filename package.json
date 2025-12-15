@@ -1,5 +1,5 @@
 {
-  "name": "jurconstructor-bot", // Amvera deployment "jurconstructor-bot",
+  "name": "jurconstructor-bot",
   "version": "1.0.1",
   "description": "Синхронный бот-юрист для создания юридических документов",
   "main": "src/main.js",
