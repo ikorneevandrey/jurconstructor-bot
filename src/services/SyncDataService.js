@@ -3,19 +3,17 @@ const path = require('path');
 
 class SyncDataService {
   constructor() {
-    this.dbPath = path.join(__dirname, '../../data/users.json');
+    this.dbPath = path.join(__dirname, '../../data/database.json');
     this.init();
   }
 
   init() {
     try {
-      // Создаем папку data если нет
       const dataDir = path.dirname(this.dbPath);
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
       
-      // Создаем файл если нет
       if (!fs.existsSync(this.dbPath)) {
         const initialData = { 
           users: {}, 
@@ -63,10 +61,24 @@ class SyncDataService {
     }
   }
 
-  // === Работа с пользователями ===
+  // ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
+  
   getUser(userId) {
     const data = this.loadData();
     return data.users[userId] || null;
+  }
+
+  getUserWithConsent(userId) {
+    const user = this.getUser(userId);
+    if (user) {
+      return {
+        ...user,
+        hasPrivacyConsent: user.privacyConsentAccepted || false,
+        privacyConsentDate: user.privacyConsentDate || null,
+        consentRefused: user.consentRefused || false
+      };
+    }
+    return null;
   }
 
   saveUser(userId, userData) {
@@ -99,6 +111,54 @@ class SyncDataService {
     return data.users[userId];
   }
 
+  savePrivacyConsent(userId, accepted = true) {
+    const data = this.loadData();
+    if (!data.users[userId]) {
+      data.users[userId] = {
+        id: userId,
+        createdAt: new Date().toISOString()
+      };
+    }
+    
+    const updateData = {
+      privacyConsentAccepted: accepted,
+      privacyConsentDate: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    if (!accepted) {
+      updateData.isActive = false;
+      updateData.consentRefused = true;
+    } else {
+      updateData.isActive = true;
+      updateData.consentRefused = false;
+    }
+    
+    data.users[userId] = {
+      ...data.users[userId],
+      ...updateData
+    };
+    
+    this.saveData(data);
+    return data.users[userId];
+  }
+
+  hasPrivacyConsent(userId) {
+    const user = this.getUser(userId);
+    return user && user.privacyConsentAccepted === true;
+  }
+
+  getUsersWithoutConsent() {
+    const data = this.loadData();
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    return Object.values(data.users).filter(u => 
+      !u.privacyConsentAccepted && 
+      u.consentRefused !== true &&
+      u.createdAt > dayAgo
+    );
+  }
+
   getAllUsers() {
     const data = this.loadData();
     return data.users;
@@ -111,7 +171,8 @@ class SyncDataService {
     return true;
   }
 
-  // === Работа с заказами ===
+  // ==================== РАБОТА С ЗАКАЗАМИ ====================
+  
   createOrder(orderData) {
     const data = this.loadData();
     const orderId = `order_${Date.now()}`;
@@ -153,7 +214,8 @@ class SyncDataService {
     return data.orders[orderId];
   }
 
-  // === Работа с делами ===
+  // ==================== РАБОТА С ДЕЛАМИ ====================
+  
   createCase(caseData) {
     const data = this.loadData();
     const caseId = `case_${Date.now()}`;
@@ -195,7 +257,8 @@ class SyncDataService {
     return data.cases[caseId];
   }
 
-  // === Шаблоны документов ===
+  // ==================== ШАБЛОНЫ ДОКУМЕНТОВ ====================
+  
   getAllTemplates() {
     const data = this.loadData();
     return data.templates || {};
@@ -203,42 +266,33 @@ class SyncDataService {
 
   getTemplateById(templateId) {
     const templates = this.getAllTemplates();
-    
-    // Ищем во всех категориях
     for (const category in templates) {
       const found = templates[category].find(t => t.id == templateId);
       if (found) return found;
     }
-    
     return null;
   }
 
-  // === Поиск и фильтрация ===
-  searchUsers(query) {
+  // ==================== СТАТИСТИКА ====================
+  
+  getStats() {
     const data = this.loadData();
     const users = Object.values(data.users);
     
-    return users.filter(user => 
-      user.username?.toLowerCase().includes(query.toLowerCase()) ||
-      user.firstName?.toLowerCase().includes(query.toLowerCase()) ||
-      user.lastName?.toLowerCase().includes(query.toLowerCase())
-    );
-  }
-
-  // === Статистика ===
-  getStats() {
-    const data = this.loadData();
-    
     return {
-      totalUsers: Object.keys(data.users).length,
-      activeUsers: Object.values(data.users).filter(u => u.isActive).length,
+      totalUsers: users.length,
+      activeUsers: users.filter(u => u.isActive).length,
+      usersWithConsent: users.filter(u => u.privacyConsentAccepted).length,
+      usersWithoutConsent: users.filter(u => !u.privacyConsentAccepted && u.consentRefused !== true).length,
+      refusedConsent: users.filter(u => u.consentRefused).length,
       totalOrders: Object.keys(data.orders).length,
       totalCases: Object.keys(data.cases).length,
       lastUpdated: new Date().toISOString()
     };
   }
 
-  // === Резервное копирование ===
+  // ==================== РЕЗЕРВНОЕ КОПИРОВАНИЕ ====================
+  
   createBackup() {
     try {
       const backupDir = path.join(__dirname, '../../backups');
@@ -252,7 +306,6 @@ class SyncDataService {
       fs.writeFileSync(backupPath, JSON.stringify(data, null, 2));
       console.log(`✅ Резервная копия создана: ${backupPath}`);
       
-      // Удаляем старые бэкапы (оставляем последние 10)
       this.cleanupOldBackups(backupDir);
       
       return backupPath;
@@ -270,7 +323,6 @@ class SyncDataService {
         .map(f => ({ ...f, time: fs.statSync(f.path).mtime.getTime() }))
         .sort((a, b) => b.time - a.time);
       
-      // Удаляем все кроме последних 10
       if (files.length > 10) {
         files.slice(10).forEach(f => {
           fs.unlinkSync(f.path);
@@ -283,5 +335,4 @@ class SyncDataService {
   }
 }
 
-// Экспортируем синглтон
 module.exports = new SyncDataService();

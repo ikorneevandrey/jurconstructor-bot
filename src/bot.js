@@ -7,39 +7,28 @@ class SyncBot {
   constructor() {
     this.bot = null;
     this.isRunning = false;
-    this.userStates = {}; // Состояния пользователей в памяти
+    this.userStates = {};
   }
 
   initialize() {
     try {
       console.log('🚀 Инициализация синхронного бота...');
       
-      // Загружаем конфигурацию
       const config = SyncConfig.getAll();
       console.log(`🤖 Бот: ${config.bot.name} v${config.bot.version}`);
       
-      // Проверяем токен
       const token = process.env.BOT_TOKEN;
       if (!token) {
         throw new Error('BOT_TOKEN не найден в переменных окружения');
       }
       
-      // Инициализируем бота
       this.bot = new Telegraf(token);
       
-      // Инициализируем базу данных
       SyncDataService.init();
       
-      // Настраиваем middleware
       this.setupMiddlewares();
-      
-      // Регистрируем команды
       this.registerCommands();
-      
-      // Регистрируем обработчики
       this.registerHandlers();
-      
-      // Настраиваем обработку ошибок
       this.setupErrorHandling();
       
       console.log('✅ Бот инициализирован успешно');
@@ -52,6 +41,38 @@ class SyncBot {
   }
 
   setupMiddlewares() {
+    // Middleware для проверки согласия на обработку ПД
+    this.bot.use(async (ctx, next) => {
+      const userId = ctx.from?.id;
+      if (!userId) return next();
+      
+      // Пропускаем команду /start
+      if (ctx.message?.text === '/start') return next();
+      
+      // Пропускаем callback от кнопок согласия
+      if (ctx.callbackQuery?.data?.startsWith('privacy_')) return next();
+      
+      const user = SyncDataService.getUser(userId);
+      
+      // Если пользователя нет - просим начать с /start
+      if (!user) {
+        await ctx.reply(
+          '⚠️ Пожалуйста, начните с команды /start',
+          { reply_markup: { remove_keyboard: true } }
+        );
+        return;
+      }
+      
+      // Если у пользователя нет согласия - показываем соглашение
+      if (!user.privacyConsentAccepted) {
+        await this.showPrivacyAgreement(ctx, userId);
+        return;
+      }
+      
+      // Если всё OK - продолжаем
+      await next();
+    });
+
     // Middleware для логирования
     this.bot.use((ctx, next) => {
       const userId = ctx.from?.id;
@@ -63,7 +84,6 @@ class SyncBot {
         'info'
       );
       
-      // Обновляем активность пользователя
       if (userId) {
         SyncDataService.saveUser(userId, {
           username: ctx.from.username,
@@ -78,53 +98,123 @@ class SyncBot {
     });
   }
 
+  // ==================== СИСТЕМА СОГЛАСИЯ ====================
+  
+  async showPrivacyAgreement(ctx, userId) {
+    const privacyText = `🔐 *СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ*\n\n` +
+      `Для использования бота необходимо ваше согласие на обработку персональных данных в соответствии с Федеральным законом №152-ФЗ.\n\n` +
+      `*Что мы обрабатываем:*\n` +
+      `• Ваш Telegram ID и имя пользователя\n` +
+      `• Имя и фамилию (если указаны в профиле)\n` +
+      `• Информацию, которую вы предоставляете в ходе использования бота\n` +
+      `• Данные о ваших действиях и созданных документах\n\n` +
+      `*Цели обработки:*\n` +
+      `• Предоставление услуг по созданию юридических документов\n` +
+      `• Хранение истории ваших дел и документов\n` +
+      `• Улучшение качества сервиса\n` +
+      `• Соблюдение законодательных требований\n\n` +
+      `*Срок хранения:*\n` +
+      `Данные хранятся в течение 3 лет с момента последней активности или до отзыва согласия.\n\n` +
+      `*Полный текст соглашения:* [Скачать PDF](https://ваш-домен.ru/privacy.pdf)\n\n` +
+      `*Нажимая "Принять", вы даете согласие на обработку персональных данных.*`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('✅ Принимаю', 'privacy_accept'),
+        Markup.button.callback('❌ Отказываюсь', 'privacy_decline')
+      ]
+    ]);
+    
+    await ctx.reply(privacyText, {
+      parse_mode: 'Markdown',
+      disable_web_page_preview: false,
+      reply_markup: keyboard
+    });
+    
+    SyncDataService.saveUser(userId, {
+      step: 'awaiting_privacy_consent',
+      lastActivity: new Date().toISOString()
+    });
+  }
+  
+  async handlePrivacyAccept(ctx, userId) {
+    SyncDataService.savePrivacyConsent(userId, true);
+    
+    await ctx.answerCallbackQuery('✅ Согласие принято');
+    await ctx.editMessageText(
+      '✅ *Спасибо! Согласие принято.*\n\n' +
+      'Теперь вы можете пользоваться всеми функциями бота. Для начала работы выберите действие в меню ниже.',
+      { parse_mode: 'Markdown' }
+    );
+    
+    await this.showMainMenu(ctx);
+  }
+  
+  async handlePrivacyDecline(ctx, userId) {
+    SyncDataService.savePrivacyConsent(userId, false);
+    
+    await ctx.answerCallbackQuery('❌ Согласие отклонено');
+    await ctx.editMessageText(
+      '❌ *Вы отказались от соглашения.*\n\n' +
+      'К сожалению, без согласия на обработку персональных данных мы не можем предоставлять услуги бота.\n\n' +
+      'Ваши данные не будут обрабатываться. Если передумаете - просто напишите /start',
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  // ==================== РЕГИСТРАЦИЯ КОМАНД ====================
+  
   registerCommands() {
     // ========== КОМАНДА /start ==========
-    this.bot.command('start', (ctx) => {
+    this.bot.command('start', async (ctx) => {
       const userId = ctx.from.id;
       
-      // Получаем пользователя (синхронно)
-      const user = SyncDataService.getUser(userId);
+      let user = SyncDataService.getUser(userId);
       
       if (!user) {
-        // Регистрируем нового пользователя
-        const newUser = SyncDataService.saveUser(userId, {
+        // Новый пользователь
+        user = SyncDataService.saveUser(userId, {
           username: ctx.from.username,
           firstName: ctx.from.first_name,
           lastName: ctx.from.last_name,
           languageCode: ctx.from.language_code,
           isActive: true,
-          step: 'main_menu',
+          step: 'awaiting_privacy_consent',
           createdAt: new Date().toISOString(),
           referrals: 0,
           balance: 0
         });
         
-        ctx.reply(
+        await ctx.reply(
           `👋 Добро пожаловать в *Юрист-Конструктор*!\n\n` +
           `Я помогу вам:\n` +
           `• Создавать юридические документы\n` +
           `• Управлять вашими делами\n` +
           `• Консультировать по правовым вопросам\n\n` +
-          `Используйте меню ниже для навигации.`,
+          `*Прежде чем начать, пожалуйста, ознакомьтесь с соглашением об обработке персональных данных.*`,
           { parse_mode: 'Markdown' }
         );
+        
+        // Показываем соглашение через 2 секунды
+        setTimeout(async () => {
+          await this.showPrivacyAgreement(ctx, userId);
+        }, 2000);
+        
+      } else if (!user.privacyConsentAccepted) {
+        // Пользователь есть, но согласия нет
+        await ctx.reply('Для продолжения работы необходимо принять соглашение об обработке персональных данных.');
+        await this.showPrivacyAgreement(ctx, userId);
+        
       } else {
-        // Приветствуем существующего пользователя
-        SyncDataService.updateUser(userId, {
+        // Пользователь с согласием
+        SyncDataService.saveUser(userId, {
           isActive: true,
           lastActivity: new Date().toISOString()
         });
         
-        ctx.reply(
-          `🎉 С возвращением, *${user.firstName || 'друг'}*!\n` +
-          `Рад снова вас видеть.`,
-          { parse_mode: 'Markdown' }
-        );
+        await ctx.reply(`🎉 С возвращением, ${user.firstName || 'друг'}!`);
+        await this.showMainMenu(ctx);
       }
-      
-      // Показываем главное меню
-      this.showMainMenu(ctx);
     });
 
     // ========== КОМАНДА /help ==========
@@ -134,7 +224,7 @@ class SyncBot {
         `/start - Начать работу с ботом\n` +
         `/help - Получить помощь\n` +
         `/menu - Показать меню\n` +
-        `/docs - Документация\n\n` +
+        `/privacy - Показать соглашение о конфиденциальности\n\n` +
         `*Функции бота:*\n` +
         `• Создание юридических документов\n` +
         `• Управление делами\n` +
@@ -151,91 +241,147 @@ class SyncBot {
       this.showMainMenu(ctx);
     });
 
-    // ========== КОМАНДА /docs ==========
-    this.bot.command('docs', (ctx) => {
-      ctx.reply(
-        `📖 *Документация*\n\n` +
-        `1. *Создание документа:*\n` +
-        `   - Выберите тип документа\n` +
-        `   - Заполните форму\n` +
-        `   - Получите готовый документ\n\n` +
-        `2. *Управление делами:*\n` +
-        `   - Создавайте дела\n` +
-        `   - Добавляйте документы\n` +
-        `   - Отслеживайте статус\n\n` +
-        `3. *Шаблоны:*\n` +
-        `   - Более 50 готовых шаблонов\n` +
-        `   - Постоянное обновление\n\n` +
-        `*Для начала работы нажмите /start*`,
-        { parse_mode: 'Markdown' }
-      );
+    // ========== КОМАНДА /privacy ==========
+    this.bot.command('privacy', async (ctx) => {
+      const userId = ctx.from.id;
+      const user = SyncDataService.getUser(userId);
+      
+      if (user?.privacyConsentAccepted) {
+        const consentDate = SyncHelpers.formatDate(new Date(user.privacyConsentDate));
+        await ctx.reply(
+          `🔐 *Ваше согласие на обработку ПД*\n\n` +
+          `✅ Вы приняли соглашение ${consentDate}\n` +
+          `Для отзыва согласия напишите /revoke_consent`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        await this.showPrivacyAgreement(ctx, userId);
+      }
     });
 
-    // ========== КОМАНДА /stats (админ) ==========
-    this.bot.command('stats', (ctx) => {
+    // ========== КОМАНДА /revoke_consent ==========
+    this.bot.command('revoke_consent', async (ctx) => {
       const userId = ctx.from.id;
+      const user = SyncDataService.getUser(userId);
       
-      // Проверяем права админа
-      if (!SyncConfig.isAdmin(userId)) {
-        ctx.reply('⛔ У вас нет прав для этой команды.');
+      if (!user) {
+        await ctx.reply('Вы не зарегистрированы в боте.');
         return;
       }
       
-      // Получаем статистику
+      if (!user.privacyConsentAccepted) {
+        await ctx.reply('У вас нет активного согласия на обработку ПД.');
+        return;
+      }
+      
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Да, отозвать', 'revoke_confirm'),
+          Markup.button.callback('❌ Нет, оставить', 'revoke_cancel')
+        ]
+      ]);
+      
+      await ctx.reply(
+        `⚠️ *Отзыв согласия на обработку ПД*\n\n` +
+        `Вы уверены, что хотите отозвать согласие на обработку персональных данных?\n\n` +
+        `*Это приведет к:*\n` +
+        `• Прекращению обработки ваших данных\n` +
+        `• Удалению ваших активных дел\n` +
+        `• Блокировке доступа к боту\n\n` +
+        `После отзыва вы сможете снова принять соглашение через /start`,
+        { parse_mode: 'Markdown', reply_markup: keyboard }
+      );
+    });
+
+    // ========== КОМАНДА /privacy_stats (админ) ==========
+    this.bot.command('privacy_stats', async (ctx) => {
+      const userId = ctx.from.id;
+      
+      if (!SyncConfig.isAdmin(userId)) {
+        await ctx.reply('⛔ У вас нет прав для этой команды.');
+        return;
+      }
+      
+      const stats = SyncDataService.getStats();
+      
+      const statsText = `📊 *Статистика согласий на обработку ПД*\n\n` +
+        `👥 Всего пользователей: ${stats.totalUsers}\n` +
+        `✅ Согласились: ${stats.usersWithConsent}\n` +
+        `⏳ Без решения: ${stats.usersWithoutConsent}\n` +
+        `❌ Отказались: ${stats.refusedConsent}\n\n` +
+        `📈 Активных: ${stats.activeUsers}\n` +
+        `📦 Заказов: ${stats.totalOrders}\n` +
+        `📁 Дел: ${stats.totalCases}\n\n` +
+        `🔄 Обновлено: ${SyncHelpers.formatDate(new Date(stats.lastUpdated))}`;
+      
+      await ctx.reply(statsText, { parse_mode: 'Markdown' });
+    });
+
+    // ========== КОМАНДА /stats (админ) ==========
+    this.bot.command('stats', async (ctx) => {
+      const userId = ctx.from.id;
+      
+      if (!SyncConfig.isAdmin(userId)) {
+        await ctx.reply('⛔ У вас нет прав для этой команды.');
+        return;
+      }
+      
       const stats = SyncDataService.getStats();
       
       const statsText = `📊 *Статистика бота*\n\n` +
         `👥 Пользователи:\n` +
         `   Всего: ${stats.totalUsers}\n` +
-        `   Активных: ${stats.activeUsers}\n\n` +
+        `   Активных: ${stats.activeUsers}\n` +
+        `   Согласия: ${stats.usersWithConsent}/${stats.totalUsers}\n\n` +
         `📦 Заказы: ${stats.totalOrders}\n` +
         `📁 Дела: ${stats.totalCases}\n\n` +
         `🔄 Обновлено: ${SyncHelpers.formatDate(new Date(stats.lastUpdated))}`;
       
-      ctx.reply(statsText, { parse_mode: 'Markdown' });
+      await ctx.reply(statsText, { parse_mode: 'Markdown' });
     });
 
     // ========== КОМАНДА /backup (админ) ==========
-    this.bot.command('backup', (ctx) => {
+    this.bot.command('backup', async (ctx) => {
       const userId = ctx.from.id;
       
       if (!SyncConfig.isAdmin(userId)) {
-        ctx.reply('⛔ У вас нет прав для этой команды.');
+        await ctx.reply('⛔ У вас нет прав для этой команды.');
         return;
       }
       
-      ctx.reply('🔄 Создание резервной копии...');
+      await ctx.reply('🔄 Создание резервной копии...');
       
-      // Создаем бэкап
       const backupPath = SyncDataService.createBackup();
       
       if (backupPath) {
-        ctx.reply(`✅ Резервная копия создана успешно!\nПуть: \`${backupPath}\``, {
+        await ctx.reply(`✅ Резервная копия создана успешно!\nПуть: \`${backupPath}\``, {
           parse_mode: 'Markdown'
         });
       } else {
-        ctx.reply('❌ Ошибка создания резервной копии.');
+        await ctx.reply('❌ Ошибка создания резервной копии.');
       }
     });
 
     // ========== КОМАНДА /users (админ) ==========
-    this.bot.command('users', (ctx) => {
+    this.bot.command('users', async (ctx) => {
       const userId = ctx.from.id;
       
       if (!SyncConfig.isAdmin(userId)) {
-        ctx.reply('⛔ У вас нет прав для этой команды.');
+        await ctx.reply('⛔ У вас нет прав для этой команды.');
         return;
       }
       
       const allUsers = SyncDataService.getAllUsers();
       const usersList = Object.values(allUsers)
-        .slice(0, 20) // Первые 20 пользователей
+        .slice(0, 20)
         .map((user, index) => 
-          `${index + 1}. ${user.firstName || 'Без имени'} (@${user.username || 'нет'}) - ${SyncHelpers.formatDate(new Date(user.createdAt))}`
+          `${index + 1}. ${user.firstName || 'Без имени'} (@${user.username || 'нет'}) ` +
+          `${user.privacyConsentAccepted ? '✅' : '❌'} ` +
+          `${SyncHelpers.formatDate(new Date(user.createdAt))}`
         )
         .join('\n');
       
-      ctx.reply(
+      await ctx.reply(
         `👥 *Последние пользователи:*\n\n${usersList}\n\n` +
         `Всего пользователей: ${Object.keys(allUsers).length}`,
         { parse_mode: 'Markdown' }
@@ -243,14 +389,14 @@ class SyncBot {
     });
   }
 
-  showMainMenu(ctx) {
+  async showMainMenu(ctx) {
     const keyboard = Markup.keyboard([
       ['📄 Создать документ', '📁 Мои дела'],
       ['⚖️ Консультация', '📋 Шаблоны'],
       ['⚙️ Настройки', '❓ Помощь']
     ]).resize();
     
-    ctx.reply(
+    await ctx.reply(
       '🏠 *Главное меню*\n\n' +
       'Выберите действие:',
       { 
@@ -259,72 +405,110 @@ class SyncBot {
       }
     );
     
-    // Сохраняем состояние пользователя
     const userId = ctx.from.id;
     SyncDataService.updateUser(userId, { step: 'main_menu' });
     this.userStates[userId] = { step: 'main_menu' };
   }
 
   registerHandlers() {
-    // ========== ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ ==========
-    this.bot.on('text', (ctx) => {
-      const userId = ctx.from.id;
-      const text = ctx.message.text;
-      const user = SyncDataService.getUser(userId);
-      
-      // Проверяем состояние пользователя
-      const userState = this.userStates[userId] || { step: 'main_menu' };
-      
-      switch (userState.step) {
-        case 'awaiting_document_name':
-          this.handleDocumentName(ctx, userId, text);
-          break;
-          
-        case 'awaiting_document_description':
-          this.handleDocumentDescription(ctx, userId, text);
-          break;
-          
-        default:
-          // Обработка кнопок главного меню
-          this.handleMainMenuSelection(ctx, userId, text);
-      }
-    });
-
     // ========== ОБРАБОТКА CALLBACK QUERY ==========
-    this.bot.on('callback_query', (ctx) => {
-      // Отвечаем на callback
-      ctx.answerCbQuery().catch(() => {});
+    this.bot.on('callback_query', async (ctx) => {
+      await ctx.answerCbQuery();
       
       const callbackData = ctx.callbackQuery.data;
       const userId = ctx.from.id;
       
-      // Обрабатываем callback
-      if (callbackData.startsWith('template_')) {
+      // Обработка согласия на обработку ПД
+      if (callbackData === 'privacy_accept') {
+        await this.handlePrivacyAccept(ctx, userId);
+      } 
+      else if (callbackData === 'privacy_decline') {
+        await this.handlePrivacyDecline(ctx, userId);
+      }
+      // Обработка отзыва согласия
+      else if (callbackData === 'revoke_confirm') {
+        await this.handleRevokeConfirm(ctx, userId);
+      }
+      else if (callbackData === 'revoke_cancel') {
+        await ctx.editMessageText('❌ Отзыв согласия отменен.');
+      }
+      // Другие callback-обработчики
+      else if (callbackData.startsWith('template_')) {
         const templateId = callbackData.replace('template_', '');
-        this.handleTemplateSelection(ctx, userId, templateId);
+        await this.handleTemplateSelection(ctx, userId, templateId);
       }
       else if (callbackData.startsWith('case_')) {
         const caseId = callbackData.replace('case_', '');
-        this.handleCaseSelection(ctx, userId, caseId);
+        await this.handleCaseSelection(ctx, userId, caseId);
       }
-      else if (callbackData === 'create_new_document') {
-        this.showDocumentTypes(ctx);
+    });
+    
+    // ========== ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ ==========
+    this.bot.on('text', async (ctx) => {
+      const userId = ctx.from.id;
+      const text = ctx.message.text;
+      const user = SyncDataService.getUser(userId);
+      
+      if (!user || !user.privacyConsentAccepted) {
+        await ctx.reply('Пожалуйста, сначала примите соглашение через /start');
+        return;
+      }
+      
+      const userState = this.userStates[userId] || { step: 'main_menu' };
+      
+      switch (userState.step) {
+        case 'awaiting_document_name':
+          await this.handleDocumentName(ctx, userId, text);
+          break;
+          
+        case 'awaiting_document_description':
+          await this.handleDocumentDescription(ctx, userId, text);
+          break;
+          
+        default:
+          await this.handleMainMenuSelection(ctx, userId, text);
       }
     });
   }
-
-  handleMainMenuSelection(ctx, userId, text) {
+  
+  async handleRevokeConfirm(ctx, userId) {
+    // Отзыв согласия
+    SyncDataService.savePrivacyConsent(userId, false);
+    
+    // Удаляем дела пользователя
+    const userCases = SyncDataService.getUserCases(userId);
+    for (const userCase of userCases) {
+      // Можно пометить как удаленные, а не удалять физически
+      SyncDataService.updateCase(userCase.id, {
+        status: 'deleted',
+        deletedAt: new Date().toISOString(),
+        deletionReason: 'consent_revoked'
+      });
+    }
+    
+    await ctx.editMessageText(
+      '✅ *Согласие отозвано*\n\n' +
+      'Ваше согласие на обработку персональных данных отозвано.\n' +
+      '• Обработка ваших данных прекращена\n' +
+      '• Ваши активные дела помечены как удаленные\n' +
+      '• Доступ к боту заблокирован\n\n' +
+      'Если передумаете, вы можете снова принять соглашение через команду /start',
+      { parse_mode: 'Markdown' }
+    );
+  }
+  
+  async handleMainMenuSelection(ctx, userId, text) {
     switch (text) {
       case '📄 Создать документ':
-        this.showDocumentTypes(ctx);
+        await this.showDocumentTypes(ctx);
         break;
         
       case '📁 Мои дела':
-        this.showUserCases(ctx, userId);
+        await this.showUserCases(ctx, userId);
         break;
         
       case '⚖️ Консультация':
-        ctx.reply(
+        await ctx.reply(
           '⚖️ *Юридическая консультация*\n\n' +
           'Опишите ваш вопрос, и наш юрист свяжется с вами в течение 24 часов.\n\n' +
           'Стоимость: 500 руб./вопрос\n' +
@@ -335,15 +519,15 @@ class SyncBot {
         break;
         
       case '📋 Шаблоны':
-        this.showTemplates(ctx);
+        await this.showTemplates(ctx);
         break;
         
       case '⚙️ Настройки':
-        this.showSettings(ctx, userId);
+        await this.showSettings(ctx, userId);
         break;
         
       case '❓ Помощь':
-        ctx.reply(
+        await ctx.reply(
           '❓ *Помощь*\n\n' +
           'Если у вас возникли проблемы:\n' +
           '1. Перезапустите бота командой /start\n' +
@@ -358,17 +542,16 @@ class SyncBot {
         break;
         
       default:
-        ctx.reply('Используйте меню для навигации.');
+        await ctx.reply('Используйте меню для навигации.');
     }
   }
 
-  showDocumentTypes(ctx) {
+  async showDocumentTypes(ctx) {
     const templates = SyncDataService.getAllTemplates();
     
     let message = '📄 *Выберите тип документа:*\n\n';
     const keyboard = [];
     
-    // Добавляем категории
     for (const category in templates) {
       const categoryName = this.getCategoryName(category);
       message += `*${categoryName}:*\n`;
@@ -377,51 +560,41 @@ class SyncBot {
         message += `  • ${template.name}\n`;
         
         keyboard.push([
-          Markup.button.callback(
-            template.name,
-            `template_${template.id}`
-          )
+          Markup.button.callback(template.name, `template_${template.id}`)
         ]);
       });
       
       message += '\n';
     }
     
-    // Добавляем кнопку для создания нового
-    keyboard.push([
-      Markup.button.callback('➕ Создать новый тип', 'create_new_document')
-    ]);
-    
-    ctx.reply(message, {
+    await ctx.reply(message, {
       parse_mode: 'Markdown',
       reply_markup: Markup.inlineKeyboard(keyboard)
     });
   }
-
-  handleTemplateSelection(ctx, userId, templateId) {
+  
+  async handleTemplateSelection(ctx, userId, templateId) {
     const template = SyncDataService.getTemplateById(templateId);
     
     if (!template) {
-      ctx.reply('❌ Шаблон не найден.');
+      await ctx.reply('❌ Шаблон не найден.');
       return;
     }
     
-    // Сохраняем выбор пользователя
     this.userStates[userId] = {
       step: 'awaiting_document_name',
       selectedTemplate: template
     };
     
-    ctx.reply(
+    await ctx.reply(
       `✅ Вы выбрали: *${template.name}*\n\n` +
       `Теперь введите название вашего документа:\n` +
       `(Например: "Договор аренды квартиры")`,
       { parse_mode: 'Markdown' }
     );
   }
-
-  handleDocumentName(ctx, userId, documentName) {
-    // Создаем новое дело
+  
+  async handleDocumentName(ctx, userId, documentName) {
     const userState = this.userStates[userId];
     const caseData = {
       userId: userId,
@@ -434,39 +607,36 @@ class SyncBot {
     
     const newCase = SyncDataService.createCase(caseData);
     
-    // Обновляем состояние пользователя
     this.userStates[userId] = {
       step: 'awaiting_document_description',
       caseId: newCase.id
     };
     
-    ctx.reply(
+    await ctx.reply(
       `📁 Дело *"${documentName}"* создано!\n\n` +
       `Теперь опишите детали вашего дела:\n` +
       `(Что должно быть указано в документе?)`,
       { parse_mode: 'Markdown' }
     );
   }
-
-  handleDocumentDescription(ctx, userId, description) {
+  
+  async handleDocumentDescription(ctx, userId, description) {
     const userState = this.userStates[userId];
     
     if (!userState.caseId) {
-      ctx.reply('❌ Ошибка: дело не найдено.');
+      await ctx.reply('❌ Ошибка: дело не найдено.');
       return;
     }
     
-    // Обновляем дело
     SyncDataService.updateCase(userState.caseId, {
       description: description,
       status: 'in_progress'
     });
     
-    // Сбрасываем состояние
     this.userStates[userId] = { step: 'main_menu' };
     SyncDataService.updateUser(userId, { step: 'main_menu' });
     
-    ctx.reply(
+    await ctx.reply(
       `✅ Описание добавлено!\n\n` +
       `Ваше дело передано на обработку.\n` +
       `Мы уведомим вас, когда документ будет готов.\n\n` +
@@ -477,15 +647,14 @@ class SyncBot {
       }
     );
     
-    // Показываем главное меню
-    this.showMainMenu(ctx);
+    await this.showMainMenu(ctx);
   }
-
-  showUserCases(ctx, userId) {
+  
+  async showUserCases(ctx, userId) {
     const cases = SyncDataService.getUserCases(userId);
     
     if (cases.length === 0) {
-      ctx.reply(
+      await ctx.reply(
         '📁 У вас пока нет дел.\n\n' +
         'Чтобы создать первое дело, выберите "Создать документ" в главном меню.'
       );
@@ -513,13 +682,13 @@ class SyncBot {
       message += `... и еще ${cases.length - 10} дел`;
     }
     
-    ctx.reply(message, {
+    await ctx.reply(message, {
       parse_mode: 'Markdown',
       reply_markup: Markup.inlineKeyboard(keyboard)
     });
   }
-
-  showTemplates(ctx) {
+  
+  async showTemplates(ctx) {
     const templates = SyncDataService.getAllTemplates();
     
     let message = '📋 *Доступные шаблоны:*\n\n';
@@ -540,10 +709,10 @@ class SyncBot {
     message += `Всего шаблонов: ${count}\n\n`;
     message += 'Для использования шаблона выберите "Создать документ" в главном меню.';
     
-    ctx.reply(message, { parse_mode: 'Markdown' });
+    await ctx.reply(message, { parse_mode: 'Markdown' });
   }
-
-  showSettings(ctx, userId) {
+  
+  async showSettings(ctx, userId) {
     const user = SyncDataService.getUser(userId);
     
     const keyboard = Markup.inlineKeyboard([
@@ -559,16 +728,22 @@ class SyncBot {
       ],
       [
         Markup.button.callback('📊 Статистика', 'user_stats'),
-        Markup.button.callback('🗑️ Удалить данные', 'delete_data')
+        Markup.button.callback('🔐 Конфиденциальность', 'privacy_settings')
       ]
     ]);
     
-    ctx.reply(
+    const consentStatus = user.privacyConsentAccepted ? 
+      `✅ Принято ${SyncHelpers.formatDate(new Date(user.privacyConsentDate))}` : 
+      '❌ Не принято';
+    
+    await ctx.reply(
       `⚙️ *Настройки*\n\n` +
       `👤 *Профиль:*\n` +
       `   Имя: ${user.firstName || 'Не указано'}\n` +
       `   Логин: @${user.username || 'Не указан'}\n` +
       `   Зарегистрирован: ${SyncHelpers.formatDate(new Date(user.createdAt))}\n\n` +
+      `🔐 *Конфиденциальность:*\n` +
+      `   Согласие на ПД: ${consentStatus}\n\n` +
       `📊 *Статистика:*\n` +
       `   Дел создано: ${SyncDataService.getUserCases(userId).length}\n` +
       `   Активность: ${user.isActive ? 'Активен' : 'Неактивен'}`,
@@ -578,8 +753,7 @@ class SyncBot {
       }
     );
   }
-
-  // Вспомогательные методы
+  
   getCategoryName(category) {
     const categories = {
       contracts: 'Договоры',
@@ -587,42 +761,39 @@ class SyncBot {
       powers: 'Доверенности',
       statements: 'Заявления'
     };
-    
     return categories[category] || category;
   }
-
+  
   getStatusIcon(status) {
     const icons = {
       draft: '📝',
       in_progress: '🔄',
       ready: '✅',
       completed: '🏁',
-      cancelled: '❌'
+      cancelled: '❌',
+      deleted: '🗑️'
     };
-    
     return icons[status] || '📌';
   }
-
+  
   getStatusText(status) {
     const texts = {
       draft: 'Черновик',
       in_progress: 'В работе',
       ready: 'Готов',
       completed: 'Завершено',
-      cancelled: 'Отменено'
+      cancelled: 'Отменено',
+      deleted: 'Удалено'
     };
-    
     return texts[status] || status;
   }
-
+  
   setupErrorHandling() {
     this.bot.catch((error, ctx) => {
       console.error('❌ Ошибка бота:', error);
       
-      // Логируем ошибку
       SyncHelpers.handleError(error, 'Ошибка в боте');
       
-      // Уведомляем пользователя
       try {
         ctx.reply(
           '⚠️ Произошла ошибка. Пожалуйста, попробуйте позже.\n' +
@@ -633,7 +804,7 @@ class SyncBot {
       }
     });
   }
-
+  
   start() {
     if (this.isRunning) {
       console.log('Бот уже запущен');
@@ -647,11 +818,9 @@ class SyncBot {
       
       console.log('✅ Бот успешно запущен!');
       
-      // Graceful shutdown
       process.once('SIGINT', () => this.stop('SIGINT'));
       process.once('SIGTERM', () => this.stop('SIGTERM'));
       
-      // Автоматическое резервное копирование
       if (SyncConfig.get('features.backupEnabled')) {
         this.startAutoBackup();
       }
@@ -661,7 +830,7 @@ class SyncBot {
       throw error;
     }
   }
-
+  
   startAutoBackup() {
     const intervalHours = SyncConfig.get('features.backupInterval', 24);
     const intervalMs = intervalHours * 60 * 60 * 1000;
@@ -673,7 +842,7 @@ class SyncBot {
     
     console.log(`✅ Автоматический бэкап настроен (каждые ${intervalHours} часов)`);
   }
-
+  
   stop(signal) {
     console.log(`🛑 Остановка бота (${signal})...`);
     this.isRunning = false;
@@ -687,9 +856,7 @@ class SyncBot {
       console.error('Ошибка остановки бота:', error);
     }
     
-    // Создаем финальный бэкап
     SyncDataService.createBackup();
-    
     process.exit(0);
   }
 }
