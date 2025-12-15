@@ -1,4 +1,4 @@
 name: jurconstructor-bot
-runtime: custom
-build:
-  dockerfile: Dockerfile
+runtime: nodejs18
+run:
+  command: node src/main.js
