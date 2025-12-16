@@ -1,4 +1,10 @@
 name: jurconstructor-bot
 runtime: nodejs18
+
+# Команда запуска
 run:
   command: node src/main.js
+
+# Переменные окружения
+env:
+  BOT_TOKEN: ${BOT_TOKEN}
