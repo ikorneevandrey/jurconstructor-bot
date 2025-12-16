@@ -11,8 +11,8 @@
     "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
-    "telegraf": "^4.16.3",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
@@ -25,6 +25,13 @@
     "documents"
   ],
   "author": "Andrey Korneev",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ikorneevandrey/jurconstructor-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ikorneevandrey/jurconstructor-bot/issues"
+  },
+  "homepage": "https://github.com/ikorneevandrey/jurconstructor-bot#readme"
 }
-

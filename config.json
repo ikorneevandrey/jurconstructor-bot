@@ -1,0 +1,36 @@
+{
+  "bot": {
+    "name": "JurConstructor Bot",
+    "version": "1.0.0",
+    "adminIds": [],
+    "supportChat": "@support",
+    "language": "ru"
+  },
+  "features": {
+    "documentGeneration": true,
+    "caseManagement": true,
+    "userRegistration": true,
+    "notifications": true,
+    "backupEnabled": true,
+    "backupInterval": 24
+  },
+  "limits": {
+    "maxCasesPerUser": 10,
+    "maxDocumentsPerCase": 5,
+    "maxFileSize": 10485760,
+    "dailyRequests": 50
+  },
+  "ui": {
+    "mainMenuButtons": 4,
+    "showHelpButton": true,
+    "showStatsButton": true,
+    "paginationItems": 5
+  },
+  "paths": {
+    "data": "data/",
+    "backups": "backups/",
+    "exports": "exports/",
+    "logs": "logs/",
+    "templates": "templates/"
+  }
+}

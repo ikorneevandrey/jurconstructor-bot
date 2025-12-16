@@ -1,0 +1,41 @@
+{
+  "users": {},
+  "orders": {},
+  "cases": {},
+  "templates": {
+    "contracts": [
+      {
+        "id": 1,
+        "name": "Договор аренды",
+        "category": "rent"
+      },
+      {
+        "id": 2,
+        "name": "Договор купли-продажи",
+        "category": "sale"
+      },
+      {
+        "id": 3,
+        "name": "Трудовой договор",
+        "category": "employment"
+      }
+    ],
+    "claims": [
+      {
+        "id": 4,
+        "name": "Исковое заявление",
+        "category": "lawsuit"
+      },
+      {
+        "id": 5,
+        "name": "Жалоба",
+        "category": "complaint"
+      },
+      {
+        "id": 6,
+        "name": "Претензия",
+        "category": "claim"
+      }
+    ]
+  }
+}
