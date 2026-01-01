@@ -1,63 +1,58 @@
-import { Telegraf, Scenes, session } from 'telegraf';
-import { 
-  userMiddleware, 
-  consentMiddleware, 
-  adminMiddleware 
-} from './middleware.js';
-import { registrationScene } from '../scenes/registration.js';
-import { setupAllHandlers } from '../handlers/index.js';
+import { Telegraf, Markup, Scenes, session } from 'telegraf';
+import ConsentService from '../../services/ConsentService.js';
+import consentCheck from '../../middleware/consentCheck.js';
+import { setupAgreementHandlers } from '../handlers/agreement.js';
 import logger from '../../utils/logger.js';
+import registrationScene from './scenes/registration.js'; // создайте сцену регистрации
 
 export function createBot(token) {
   const bot = new Telegraf(token);
-  
-  // Сценарий регистрации
-  const stage = new Scenes.Stage([registrationScene]);
-  
-  // Middleware
+
+  // Поддержка сцен
+  const stage = new Scenes.Stage([registrationScene], { ttl: 300 });
   bot.use(session());
   bot.use(stage.middleware());
-  bot.use(userMiddleware);
-  bot.use(consentMiddleware);
-  bot.use(adminMiddleware);
-  
-  // Настройка обработчиков
-  setupAllHandlers(bot);
-  
-  // Глобальная обработка ошибок
-  bot.catch((error, ctx) => {
-    logger.error(`Глобальная ошибка: ${error.message}`, error, {
-      userId: ctx.from?.id,
-      updateType: ctx.updateType
-    });
-    
-    if (ctx.chat) {
-      ctx.reply('❌ Произошла непредвиденная ошибка. Пожалуйста, попробуйте позже.')
-        .catch(e => logger.error('Не удалось отправить сообщение об ошибке', e));
-    }
-  });
-  
-  return bot;
-}
 
-// Health check эндпоинт (для Amvera)
-export function setupHealthCheck(bot) {
-  bot.telegram.setWebhook(`${process.env.WEBHOOK_URL || ''}/health`);
-  
-  bot.telegram.on('webhook', async (ctx) => {
-    if (ctx.req.url === '/health') {
-      try {
-        const stats = await db.getStats();
-        ctx.res.statusCode = 200;
-        ctx.res.end(JSON.stringify({ 
-          status: 'ok', 
-          timestamp: new Date().toISOString(),
-          stats 
-        }));
-      } catch (error) {
-        ctx.res.statusCode = 500;
-        ctx.res.end(JSON.stringify({ error: 'Database error' }));
-      }
+  // Middleware согласия
+  bot.use(consentCheck);
+
+  // Команды
+  bot.start(async ctx => {
+    const userId = ctx.from.id;
+    const user = await ConsentService.getUser(userId);
+
+    if (!user) {
+      await ConsentService.saveUser(userId, {
+        username: ctx.from.username,
+        firstName: ctx.from.first_name,
+        lastName: ctx.from.last_name
+      });
     }
+
+    // Показываем согласие
+    await ctx.reply(
+      '🔐 Пожалуйста, примите условия обработки персональных данных.',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Принимаю', 'agreement_accept')],
+        [Markup.button.callback('❌ Отказываюсь', 'agreement_decline')]
+      ])
+    );
   });
+
+  bot.command('privacy_stats', async ctx => {
+    const userId = ctx.from.id;
+    const admins = process.env.ADMIN_IDS?.split(',') || [];
+    if (!admins.includes(String(userId))) return ctx.reply('⛔ Нет прав');
+
+    const users = await ConsentService.getAllUsers();
+    const accepted = users.filter(u => u.privacyConsentAccepted).length;
+    const refused = users.filter(u => u.consentRefused).length;
+
+    await ctx.reply(`Всего: ${users.length}\nСогласие принято: ${accepted}\nОтказ: ${refused}`);
+  });
+
+  // Подключаем обработчики согласия
+  setupAgreementHandlers(bot);
+
+  return bot;
 }
