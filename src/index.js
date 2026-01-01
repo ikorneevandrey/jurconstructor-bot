@@ -1,7 +1,8 @@
 import 'dotenv/config';
-import { createBot, setupHealthCheck } from './bot/core/bot.js';
+import { createBot } from './bot/core/bot.js';
 import db from './database/db.js';
 import logger from './utils/logger.js';
+import express from 'express';
 
 async function bootstrap() {
   try {
@@ -12,10 +13,26 @@ async function bootstrap() {
     // Создание бота
     const bot = createBot(process.env.BOT_TOKEN);
     
-    // Настройка health check (если используем webhook)
-    if (process.env.USE_WEBHOOK) {
-      setupHealthCheck(bot);
-    }
+    // Создаем Express сервер для health check
+    const app = express();
+    const PORT = process.env.PORT || 3000;
+    
+    app.get('/health', (req, res) => {
+      res.status(200).json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        service: 'telegram-bot'
+      });
+    });
+    
+    app.get('/', (req, res) => {
+      res.send('Telegram Bot is running');
+    });
+    
+    // Запускаем сервер
+    app.listen(PORT, () => {
+      logger.info(`Health check сервер запущен на порту ${PORT}`);
+    });
     
     // Graceful shutdown
     const shutdown = async (signal) => {
@@ -28,16 +45,7 @@ async function bootstrap() {
     process.once('SIGTERM', () => shutdown('SIGTERM'));
     
     // Запуск бота
-    if (process.env.USE_WEBHOOK) {
-      await bot.launch({
-        webhook: {
-          domain: process.env.WEBHOOK_DOMAIN,
-          port: process.env.PORT || 3000
-        }
-      });
-    } else {
-      await bot.launch();
-    }
+    await bot.launch();
     
     logger.info('🤖 Бот успешно запущен!');
     
