@@ -3,7 +3,7 @@ runtime: nodejs18
 
 # Команда запуска
 run:
-  command: node src/main.js
+  command: node src/index.js
 
 # Переменные окружения
 env:
