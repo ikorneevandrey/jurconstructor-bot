@@ -1,37 +1,22 @@
 {
-  "name": "jurconstructor-bot",
-  "version": "1.0.1",
-  "description": "Синхронный бот-юрист для создания юридических документов",
-  "main": "src/main.js",
+  "name": "telegram-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node src/main.js",
-    "dev": "nodemon src/main.js",
-    "backup": "node src/scripts/backup.js",
-    "stats": "node src/scripts/stats.js",
-    "test": "echo \"No tests specified\" && exit 0"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "migrate:json": "node src/database/json/migrations/init.js",
+    "backup": "node src/utils/backup.js",
+    "logs": "tail -f data/logs/bot.log"
   },
   "dependencies": {
-    "dotenv": "^17.2.3",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "dotenv": "^16.4.5",
+    "pino": "^9.3.1",
+    "pino-pretty": "^11.2.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
-  "keywords": [
-    "bot",
-    "telegram",
-    "legal",
-    "jurconstructor",
-    "documents"
-  ],
-  "author": "Andrey Korneev",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ikorneevandrey/jurconstructor-bot.git"
-  },
-  "bugs": {
-    "url": "https://github.com/ikorneevandrey/jurconstructor-bot/issues"
-  },
-  "homepage": "https://github.com/ikorneevandrey/jurconstructor-bot#readme"
+    "nodemon": "^3.0.3"
+  }
 }
