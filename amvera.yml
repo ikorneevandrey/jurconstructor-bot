@@ -1,10 +1,36 @@
-name: jurconstructor-bot
-runtime: nodejs18
+# Обязательная секция с метаданными проекта
+meta:
+  name: jurconstructor-bot
+  description: Telegram-бот для юридических документов
+  # tags: # Опциональные теги для категоризации
+  #   - telegram
+  #   - bot
+  #   - nodejs
 
-# Команда запуска
+# Среда выполнения и сборка
+runtime: nodejs18
+build:
+  # Команда для установки зависимых библиотек в режиме production
+  command: npm ci --only=production
+
+# Команда запуска приложения
 run:
   command: node src/index.js
 
-# Переменные окружения
+# Переменные окружения (задаются в настройках сервиса в панели Amvera)
 env:
   BOT_TOKEN: ${BOT_TOKEN}
+  NODE_ENV: production
+  # PORT: 3000 # Если у бота есть HTTP-сервер для health-check
+
+# Выделенные ресурсы
+resources:
+  memory: 512Mi
+  cpu: 0.5
+
+# Если ваш бот запускает HTTP-сервер (например, для health-check),
+# раскомментируйте следующий блок:
+# healthcheck:
+#   http:
+#     path: /health
+#     port: 3000
